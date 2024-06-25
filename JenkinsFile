@@ -1,6 +1,14 @@
 pipeline {
     agent any
 
+    environment {
+        AWS_ACCESS_KEY_ID = 'ASDVHHNNJKJHGFT'
+        AWS_SECRET_ACCESS_KEY = 'fgdhxg-dgbhi877678fgvhji'
+        LAMBDA_FUNCTION_NAME = 'lambda-function'
+        AWS_REGION = 'us-east-1'
+    }
+
+
     stages {
         stage('Checkout') {
             steps {
