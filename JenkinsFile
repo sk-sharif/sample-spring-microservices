@@ -1,10 +1,76 @@
 pipeline {
     agent any
+
     stages {
-        stage('build') {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Build') {
             steps {
                 sh 'mvn --version'
             }
+        }
+        stage('Gitleaks Scan') {
+            steps {
+                script {
+                    // Run Gitleaks and save the output
+                    def gitleaksOutput = sh(
+                        script: 'gitleaks detect --source . --report-format json --report-path gitleaks_report.json',
+                        returnStatus: true
+                    )
+
+                    // Check if the report file was created
+                    if (fileExists('gitleaks_report.json')) {
+                        echo 'Gitleaks report file found.'
+
+                        def leaks = readFile('gitleaks_report.json')
+                        echo "Gitleaks report content: ${leaks}"
+
+                        // Parse JSON and check for leaks
+                        def leaksJson = readJSON text: leaks
+                        if (leaksJson.size() > 0) {
+                            echo 'Gitleaks found secrets in the code'
+
+                            leaksJson.each { leak ->
+                                echo "Rule: ${leak.RuleID}"
+                                echo "Description: ${leak.Description}"
+                                echo "File: ${leak.File}"
+                                echo "Line Number: ${leak.LineNumber}"
+                                echo "Commit: ${leak.Commit}"
+                                echo "Author: ${leak.Author}"
+                                echo "Email: ${leak.Email}"
+                                echo "Date: ${leak.Date}"
+                                echo "===================================="
+                            }
+
+                            currentBuild.result = 'UNSTABLE'
+                        } else {
+                            echo 'No secrets found by Gitleaks'
+                        }
+                    } else {
+                        echo 'Gitleaks report file not found.'
+                        currentBuild.result = 'FAILURE'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            // Archive the Gitleaks report
+            archiveArtifacts artifacts: 'gitleaks_report.json', allowEmptyArchive: true
+
+            // Publish the HTML report to Jenkins
+            publishHTML(target: [
+                reportName: 'Gitleaks Report',
+                reportDir: '.',
+                reportFiles: 'gitleaks_report.json',
+                alwaysLinkToLastBuild: true,
+                keepAll: true
+            ])
         }
     }
 }
